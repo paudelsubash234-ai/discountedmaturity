@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LIC Nepal - Discounted Maturity Calculator</title>
+    <style>
+        :root { --lic-blue: #0054a6; --text: #333; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f7f9; padding: 20px; color: var(--text); }
+        .container { max-width: 600px; margin: auto; background: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-top: 8px solid var(--lic-blue); overflow: hidden; }
+        .header { background: var(--lic-blue); color: white; padding: 20px; text-align: center; }
+        .body { padding: 25px; }
+        .error-box { display: none; background: #fff2f2; color: #d8000c; border: 1px solid #ffbaba; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center; font-weight: bold; }
+        label { display: block; font-weight: bold; margin: 12px 0 5px; font-size: 0.85rem; color: #555; }
+        input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
+        .btn { width: 100%; padding: 15px; background: var(--lic-blue); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 20px; font-size: 1.1rem; }
+        .btn:hover { background: #003d7a; }
+        .results { display: none; margin-top: 25px; border-top: 2px dashed #eee; padding-top: 20px; }
+        .res-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f9f9f9; font-size: 1rem; }
+        .res-row span:last-child { font-weight: bold; color: var(--lic-blue); }
+        .final-box { background: #eef9f1; padding: 20px; border-radius: 8px; text-align: center; margin-top: 15px; border: 2px solid #27ae60; }
+        .final-box h2 { margin: 5px 0 0; color: #27ae60; font-size: 2.2rem; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h2 style="margin:0">Discounted Maturity</h2>
+        <small>Maturity Window: Exactly 1 Year Before Date</small>
+    </div>
+    <div class="body">
+        <div id="error" class="error-box"></div>
+        
+        <label>Paid-up SA</label>
+        <input type="number" id="paidup_sa" value="500000">
+        
+        <label>Total Bonus (Vested + Interim)</label>
+        <input type="number" id="total_bonus" value="250000">
+        
+        <label>Total Premium Paid (for TDS calculation)</label>
+        <input type="number" id="total_prem" value="400000">
+
+        <label>Maturity Date</label>
+        <input type="date" id="m_date">
+
+        <label>Calculation Date (Default: Today)</label>
+        <input type="date" id="c_date">
+
+        <button class="btn" onclick="calculateBenefit()">Calculate Net Benefit</button>
+
+        <div id="results" class="results">
+            <div class="res-row"><span>Remaining Days:</span> <span id="out_days"></span></div>
+            <div class="res-row"><span>Gross Maturity Benefit:</span> <span id="out_gross"></span></div>
+            <div class="res-row" style="color:#d32f2f"><span>Interest (Discounted Amt):</span> <span id="out_int"></span></div>
+            <div class="res-row"><span>TDS (5% on Gain):</span> <span id="out_tds"></span></div>
+            <div class="final-box">
+                <small>Net Maturity Benefit Payable</small>
+                <h2 id="out_net"></h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Set default Calculation Date to today
+    document.getElementById('c_date').valueAsDate = new Date();
+
+    function calculateBenefit() {
+        const pSA = parseFloat(document.getElementById('paidup_sa').value) || 0;
+        const tBonus = parseFloat(document.getElementById('total_bonus').value) || 0;
+        const tPrem = parseFloat(document.getElementById('total_prem').value) || 0;
+        
+        const mInput = document.getElementById('m_date').value;
+        const cInput = document.getElementById('c_date').value;
+        const err = document.getElementById('error');
+
+        if (!mInput) {
+            showErr("Please select a Maturity Date.");
+            return;
+        }
+
+        const maturityDate = new Date(mInput);
+        const calcDate = new Date(cInput);
+
+        // LOGIC: Deduct one year from maturity date to find the start of the window
+        const windowStartDate = new Date(mInput);
+        windowStartDate.setFullYear(windowStartDate.getFullYear() - 1);
+
+        // VALIDATION
+        if (calcDate < windowStartDate) {
+            showErr("Not Eligible: Calculation Date is more than 1 year before maturity.");
+            return;
+        }
+        if (calcDate >= maturityDate) {
+            showErr("Not Eligible: Calculation Date must be before the Maturity Date.");
+            return;
+        }
+
+        err.style.display = "none";
+
+        // 1. Difference in Days for calculation
+        const diffTime = maturityDate - calcDate;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        // 2. Gross Benefit
+        const gross = pSA + tBonus;
+
+        // 3. Discount Interest: (Gross * (Days/366) * 10%)
+        const discountInt = gross * (diffDays / 366) * 0.10;
+
+        // 4. Benefit After Interest
+        const afterInt = gross - discountInt;
+
+        // 5. TDS: 5% on Gain
+        const gain = afterInt - tPrem;
+        const tds = gain > 0 ? (gain * 0.05) : 0;
+
+        // 6. Net Benefit
+        const net = afterInt - tds;
+
+        // 7. Custom Rounding: 0.5 or lower rounds down
+        const roundedNet = (net % 1 <= 0.5) ? Math.floor(net) : Math.ceil(net);
+
+        // Display results
+        document.getElementById('out_days').innerText = diffDays + " Days";
+        document.getElementById('out_gross').innerText = "रू " + gross.toLocaleString('en-IN');
+        document.getElementById('out_int').innerText = "- रू " + discountInt.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        document.getElementById('out_tds').innerText = "रू " + tds.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        document.getElementById('out_net').innerText = "रू " + roundedNet.toLocaleString('en-IN');
+        document.getElementById('results').style.display = "block";
+    }
+
+    function showErr(msg) {
+        const err = document.getElementById('error');
+        err.innerText = msg;
+        err.style.display = "block";
+        document.getElementById('results').style.display = "none";
+    }
+</script>
+</body>
+</html>
